@@ -1,0 +1,73 @@
+
+services:
+  kamailio_a:
+    image: ghcr.io/kamailio/kamailio:6.0.3-focal
+    platform: linux/amd64
+    container_name: kamailio_a
+    networks:
+      - sipnet
+    hostname: sipnet.a
+    environment:
+      - SIP_DOMAIN=sipnet.a
+      - WITH_DB=no
+    volumes:
+      - ./scripts/app.cfg:/etc/kamailio/kamailio.cfg:ro
+      - ./scripts/registrar-redirect.py:/etc/kamailio/app.py:ro
+    restart: unless-stopped
+
+  kamailio_b:
+    image: ghcr.io/kamailio/kamailio:6.0.3-focal
+    platform: linux/amd64
+    container_name: kamailio_b
+    networks: 
+      - sipnet
+    hostname: sipnet.b
+    environment:
+      - SIP_DOMAIN=sipnet.b
+      - WITH_DB=no
+    volumes:
+      - ./scripts/app.cfg:/etc/kamailio/kamailio.cfg:ro
+      - ./scripts/registrar-redirect.py:/etc/kamailio/app.py:ro
+    restart: unless-stopped
+
+  terminal_alice:
+    image: twinkle:igrs_2026
+    container_name: terminal_alice
+    hostname: sipnet.alice
+    volumes:
+      - ./config/Alice.cfg:/tmp/twinkle/Alice.cfg:ro
+      - ./config/twinkle_alice.sys:/tmp/twinkle/twinkle.sys:ro
+      - ./scripts_aux/.asoundrc:/root/.asoundrc:ro
+      - ./scripts_aux/start.sh:/root/start.sh:ro
+      - twinkle-alice:/root/.twinkle
+    environment:
+      - DISPLAY=host.docker.internal:0
+    entrypoint: ["sh", "/root/start.sh"]
+    networks:
+      - sipnet
+    restart: unless-stopped
+
+  terminal_bob:
+    image: twinkle:igrs_2026
+    container_name: terminal_bob
+    hostname: sipnet.bob
+    volumes:
+      - ./config/Bob.cfg:/tmp/twinkle/Bob.cfg:ro
+      - ./config/twinkle_bob.sys:/tmp/twinkle/twinkle.sys:ro
+      - ./scripts_aux/.asoundrc:/root/.asoundrc:ro
+      - ./scripts_aux/start.sh:/root/start.sh:ro
+      - twinkle-bob:/root/.twinkle
+    environment:
+      - DISPLAY=host.docker.internal:0
+    entrypoint: ["sh", "/root/start.sh"]
+    networks:
+      - sipnet
+    restart: unless-stopped
+
+networks:
+  sipnet:
+    driver: bridge
+
+volumes:
+  twinkle-alice:
+  twinkle-bob:
