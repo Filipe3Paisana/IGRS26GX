@@ -27,6 +27,18 @@ def mod_init():
     return kamailio()
 
 
+def dominio_do_pedido(metodo):
+    """Devolve o domínio de quem faz o pedido.
+
+    - REGISTER: domínio do To ($td). Pelo RFC 3261 (10.2) o To de um REGISTER
+      contém o AoR cujo registo se pretende criar/alterar; é esse AoR que tem
+      de pertencer a acme.operador.
+    - Restantes pedidos: domínio do From ($fd), que identifica o originador do
+      pedido (RFC 3261, 8.1.1.3).
+    """
+    return KSR.pv.get("$td") if metodo == "REGISTER" else KSR.pv.get("$fd")
+
+
 def sala_do_pedido():
     """Devolve o nome da sala de conferências a que o pedido diz respeito, ou None.
 
@@ -57,6 +69,17 @@ class kamailio:
         metodo = KSR.pv.get("$rm")
         KSR.info("%s %s  From: %s  To: %s\n" % (
             metodo, KSR.pv.get("$ru"), KSR.pv.get("$fu"), KSR.pv.get("$tu")))
+
+        # 0) Segurança: só o domínio acme.operador acede a qualquer funcionalidade.
+        #    403 Forbidden (RFC 3261, 21.4.4): o servidor percebeu o pedido mas
+        #    recusa-se a satisfazê-lo, e autenticar-se não muda nada (ao contrário
+        #    de 401/407). É o código para "o uso do serviço é proibido".
+        if dominio_do_pedido(metodo) != config.DOMINIO:
+            KSR.info("  dominio externo (%s): 403\n" % dominio_do_pedido(metodo))
+            kpi.inc("registos_rejeitados" if metodo == "REGISTER" else "pedidos_dominio_externo")
+            if metodo != "ACK":          # um ACK nunca tem resposta (RFC 3261, 17.1.1.3)
+                KSR.sl.send_reply(403, "Forbidden")
+            return 1
 
         # 1) REGISTER: registo / deregisto
         if metodo == "REGISTER":
