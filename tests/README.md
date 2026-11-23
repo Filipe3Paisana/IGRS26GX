@@ -24,3 +24,7 @@ tests/capturar.sh T01-registo-ok register alice acme.operador 3600 --espera 200
 | [T02](T02-registo-dominio-externo.md) | registo de domínio externo | 403 | #3 |
 | [T03](T03-deregisto-ok.md) | deregisto de registado | 200 | #3 |
 | [T04](T04-deregisto-nao-registado.md) | deregisto de não registado | 404 | #3 |
+| [T05](T05-chamada-ok.md) | chamada acme → acme registado | 200 | #4 |
+| [T06](T06-chamada-destino-nao-registado.md) | chamada para não registado | 404 | #4 |
+| [T07](T07-chamada-origem-externa.md) | chamada de domínio externo | 403 | #4 |
+| [T08](T08-metodo-nao-suportado.md) | método não suportado | 405 | #4 |
