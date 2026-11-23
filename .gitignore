@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.db
+# capturas temporárias (as finais vão para tests/captures/ com nome do teste)
+/tmp/
+*.pcapng.tmp
