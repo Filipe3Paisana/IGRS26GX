@@ -81,9 +81,100 @@ def tratar(msg):
 # Chamadas básicas
 # ---------------------------------------------------------------------------
 
-def chamada_basica(msg):
-    """INVITE/ACK/BYE/CANCEL entre utilizadores acme.
-    TODO (#4): lookup do destino; não registado -> 404 Not Found; senão relay."""
-    if KSR.pv.get("$rm") != "ACK":
-        KSR.sl.send_reply(501, "Not Implemented")
+METODOS_SUPORTADOS = "INVITE, ACK, BYE, CANCEL, REGISTER, MESSAGE, INFO"
+
+
+def relay():
+    """Encaminha com estado (módulo tm), como no lab #4. Se o encaminhamento
+    falhar logo (ex.: destino impossível de resolver), o tm responde com erro."""
+    if KSR.tm.t_relay() < 0:
+        KSR.sl.send_reply(500, "Server Internal Error")
     return 1
+
+
+def pedido_em_dialogo(metodo):
+    """ACK, BYE, re-INVITE, ... de uma chamada já estabelecida (o To tem tag).
+
+    Como no pedido inicial fizemos record_route(), os pedidos seguintes do diálogo
+    trazem um cabeçalho Route a apontar para este proxy e o R-URI é o Contact do
+    outro terminal (RFC 3261, 12.2.1.1 e 16.12). O loose_route() consome o Route
+    e basta reencaminhar.
+    """
+    if KSR.rr.loose_route() > 0:
+        return relay()
+
+    if metodo == "ACK":
+        # ACK de uma resposta negativa (ex.: 404) que pertence a uma transação
+        # já conhecida: o tm absorve-o ou encaminha-o. Se não pertencer a nenhuma
+        # (p.ex. ACK a um 404 gerado aqui pelo sl), descarta-se: um ACK nunca tem
+        # resposta (RFC 3261, 17.1.1.3).
+        if KSR.tm.t_check_trans() > 0:
+            KSR.tm.t_relay()
+        return 1
+
+    # Sem Route (o terminal não respeitou o Record-Route): comportamento do lab #4,
+    # localizar o destino pelo R-URI.
+    if KSR.registrar.lookup(config.TABELA_REGISTOS) == 1:
+        return relay()
+    KSR.sl.send_reply(404, "Not Found")
+    return 1
+
+
+def chamada_basica(msg):
+    """Chamadas de voz entre utilizadores acme (INVITE / ACK / BYE / CANCEL).
+
+    Pedido inicial INVITE para sip:<user>@acme.operador:
+      - destino registado -> o lookup() troca o R-URI pelo Contact registado,
+        record_route() mantém o proxy no caminho do diálogo e t_relay() encaminha;
+        as respostas (180, 200, ...) voltam pelo mesmo caminho (cabeçalhos Via).
+      - destino não registado -> 404 Not Found.
+        Escolha do enunciado/CLAUDE.md. Pelo RFC 3261 (21.4.5) o 404 indica que o
+        utilizador não existe no domínio; a alternativa seria 480 Temporarily
+        Unavailable (21.4.18: utilizador existe mas não está contactável).
+      - destino de outro domínio -> 404 Not Found. O RFC 3261 (21.4.5) diz
+        explicitamente que o 404 também se usa quando o domínio do R-URI não é
+        servido por quem recebe o pedido.
+    """
+    metodo = KSR.pv.get("$rm")
+
+    # Pedidos dentro de um diálogo já existente (o To tem tag)
+    if KSR.pv.get("$tt") is not None:
+        return pedido_em_dialogo(metodo)
+
+    # CANCEL: cancela um INVITE ainda sem resposta final. O tm associa-o à
+    # transação do INVITE e propaga-o ao destino (RFC 3261, 9.2 e 16.10).
+    if metodo == "CANCEL":
+        if KSR.tm.t_check_trans() > 0:
+            return relay()
+        KSR.sl.send_reply(481, "Call/Transaction Does Not Exist")
+        return 1
+
+    if metodo == "ACK":            # ACK fora de diálogo sem transação: descartar
+        if KSR.tm.t_check_trans() > 0:
+            KSR.tm.t_relay()
+        return 1
+
+    if metodo != "INVITE":
+        # 405 Method Not Allowed (RFC 3261, 21.4.6): o método não é permitido para
+        # este R-URI; a resposta TEM de incluir o cabeçalho Allow.
+        KSR.hdr.append_to_reply("Allow: %s\r\n" % METODOS_SUPORTADOS)
+        KSR.sl.send_reply(405, "Method Not Allowed")
+        return 1
+
+    # INVITE inicial
+    if KSR.pv.get("$rd") != config.DOMINIO:
+        KSR.info("  destino fora de %s: 404\n" % config.DOMINIO)
+        kpi.inc("chamadas_destino_inexistente")
+        KSR.sl.send_reply(404, "Not Found")
+        return 1
+
+    if KSR.registrar.lookup(config.TABELA_REGISTOS) != 1:
+        KSR.info("  destino %s nao registado: 404\n" % KSR.pv.get("$ru"))
+        kpi.inc("chamadas_destino_nao_registado")
+        KSR.sl.send_reply(404, "Not Found")
+        return 1
+
+    KSR.info("  lookup: R-URI passou a %s\n" % KSR.pv.get("$ru"))
+    kpi.inc("chamadas")
+    KSR.rr.record_route()
+    return relay()
