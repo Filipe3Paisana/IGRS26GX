@@ -1,0 +1,96 @@
+
+services:
+  kamailio_a:
+    image: kamailio:igrs_2026
+    container_name: kamailio_a
+    networks: 
+      - sipnet
+    hostname: sipnet.a
+    environment:
+      - SIP_DOMAIN=sipnet.a
+      - WITH_DB=no
+    volumes:
+      - ./scripts/app.cfg:/etc/kamailio/kamailio.cfg:ro
+      - ./scripts/registrar-proxy-tm-rr-var.py:/etc/kamailio/app.py:ro
+      - ./scripts/aux_classes.py:/etc/kamailio/aux_classes.py:ro
+    restart: unless-stopped
+
+  kamailio_b:
+    image: kamailio:igrs_2026
+    container_name: kamailio_b
+    networks: 
+      - sipnet
+    hostname: sipnet.b
+    environment:
+      - SIP_DOMAIN=sipnet.b
+      - WITH_DB=no
+    volumes:
+      - ./scripts/app.cfg:/etc/kamailio/kamailio.cfg:ro
+      - ./scripts/registrar-proxy-tm-rr-var.py:/etc/kamailio/app.py:ro
+      - ./scripts/aux_classes.py:/etc/kamailio/aux_classes.py:ro
+    restart: unless-stopped
+
+  terminal_alice:
+    image: twinkle:igrs_2026
+    container_name: terminal_alice
+    hostname: sipnet.alice
+    volumes:
+      - ./config/Alice.cfg:/tmp/twinkle/Alice.cfg:ro
+      - ./config/twinkle_alice.sys:/tmp/twinkle/twinkle.sys:ro
+      - ./scripts_aux/.asoundrc:/root/.asoundrc:ro
+      - ./scripts_aux/start.sh:/root/start.sh:ro
+      - twinkle-alice:/root/.twinkle
+    environment:
+      - DISPLAY=host.docker.internal:0
+    entrypoint: ["sh", "/root/start.sh"]
+    networks:
+      - sipnet
+    restart: unless-stopped
+
+  terminal_bob:
+    image: twinkle:igrs_2026
+    container_name: terminal_bob
+    hostname: sipnet.bob
+    volumes:
+      - ./config/Bob.cfg:/tmp/twinkle/Bob.cfg:ro
+      - ./config/twinkle_bob.sys:/tmp/twinkle/twinkle.sys:ro
+      - ./scripts_aux/.asoundrc:/root/.asoundrc:ro
+      - ./scripts_aux/start.sh:/root/start.sh:ro
+      - twinkle-bob:/root/.twinkle
+    environment:
+      - DISPLAY=host.docker.internal:0
+    entrypoint: ["sh", "/root/start.sh"]
+    networks:
+      - sipnet
+    restart: unless-stopped
+
+
+  redis:
+    image: redis:7-alpine
+    container_name: sipnet.redis
+    restart: unless-stopped
+
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+
+    volumes: 
+      - redis_data:/data
+    networks:
+      - sipnet
+
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '$$REDIS_PASSWORD' ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  sipnet:
+    driver: bridge
+
+volumes:
+  twinkle-alice:
+  twinkle-bob:
+  redis_data:

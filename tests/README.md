@@ -1,0 +1,3 @@
+# Testes
+Um ficheiro por cenário: `T01-registo-ok.md`, `T02-registo-dominio-externo.md`, ...
+Cada um com: objetivo, passos, resultado esperado (código SIP), captura em `captures/`.

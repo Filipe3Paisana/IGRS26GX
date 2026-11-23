@@ -1,0 +1,99 @@
+# Ambiente Docker do ConferenceControl 2.0 (Grupo 10)
+# Baseado em labs/lab4/compose-proxy-tm-rr.yaml (Kamailio + Twinkle) e
+# labs/lab5/compose-sems.yaml (servidor de conferências SEMS).
+#
+#   docker compose up -d kamailio sems
+#   docker compose --profile terminais up -d     # terminais Twinkle (precisa de XQuartz)
+
+services:
+  kamailio:
+    image: ghcr.io/kamailio/kamailio:6.0.3-focal
+    platform: linux/amd64
+    container_name: kamailio
+    hostname: acme.operador
+    networks:
+      sipnet:
+        aliases:
+          - acme.operador          # os terminais resolvem o domínio para este contentor
+    environment:
+      - SIP_DOMAIN=acme.operador
+      - WITH_DB=no
+    volumes:
+      - ./config/kamailio.cfg:/etc/kamailio/kamailio.cfg:ro
+      - ./src:/etc/kamailio/igrs:ro
+    restart: unless-stopped
+
+  sems:
+    image: sems:igrs_2026          # docker build -f labs/lab5/sems.dockerfile -t sems:igrs_2026 labs/lab5
+    container_name: sems
+    hostname: sipnet.sems
+    networks:
+      - sipnet
+    volumes:
+      - ./config/sems.conf:/sems/sems.conf:ro
+    restart: unless-stopped
+
+  terminal_alice:
+    image: twinkle:igrs_2026
+    container_name: terminal_alice
+    hostname: sipnet.alice
+    profiles: [terminais]
+    volumes:
+      - ./config/twinkle/Alice.cfg:/tmp/twinkle/Alice.cfg:ro
+      - ./config/twinkle/twinkle_alice.sys:/tmp/twinkle/twinkle.sys:ro
+      - ./config/twinkle/.asoundrc:/root/.asoundrc:ro
+      - ./config/twinkle/start.sh:/root/start.sh:ro
+      - twinkle-alice:/root/.twinkle
+    environment:
+      - DISPLAY=host.docker.internal:0
+    entrypoint: ["sh", "/root/start.sh"]
+    networks:
+      - sipnet
+    restart: unless-stopped
+
+  terminal_bob:
+    image: twinkle:igrs_2026
+    container_name: terminal_bob
+    hostname: sipnet.bob
+    profiles: [terminais]
+    volumes:
+      - ./config/twinkle/Bob.cfg:/tmp/twinkle/Bob.cfg:ro
+      - ./config/twinkle/twinkle_bob.sys:/tmp/twinkle/twinkle.sys:ro
+      - ./config/twinkle/.asoundrc:/root/.asoundrc:ro
+      - ./config/twinkle/start.sh:/root/start.sh:ro
+      - twinkle-bob:/root/.twinkle
+    environment:
+      - DISPLAY=host.docker.internal:0
+    entrypoint: ["sh", "/root/start.sh"]
+    networks:
+      - sipnet
+    restart: unless-stopped
+
+  # Utilizador de um domínio externo (sip:manel@outro.operador) para testar os 403.
+  terminal_manel:
+    image: twinkle:igrs_2026
+    container_name: terminal_manel
+    hostname: sipnet.manel
+    profiles: [terminais]
+    volumes:
+      - ./config/twinkle/Manel.cfg:/tmp/twinkle/Manel.cfg:ro
+      - ./config/twinkle/twinkle_manel.sys:/tmp/twinkle/twinkle.sys:ro
+      - ./config/twinkle/.asoundrc:/root/.asoundrc:ro
+      - ./config/twinkle/start.sh:/root/start.sh:ro
+      - twinkle-manel:/root/.twinkle
+    environment:
+      - DISPLAY=host.docker.internal:0
+    entrypoint: ["sh", "/root/start.sh"]
+    networks:
+      - sipnet
+    restart: unless-stopped
+
+networks:
+  sipnet:
+    name: sipnet
+    driver: bridge
+
+volumes:
+  twinkle-alice:
+  twinkle-bob:
+  twinkle-manel:
